@@ -1,6 +1,6 @@
-# Making Shark stronger
+# Making Mythos stronger
 
-Concrete, high-value ways to improve Shark's playing strength, roughly ordered by
+Concrete, high-value ways to improve Mythos's playing strength, roughly ordered by
 value-for-effort. Elo figures are **rough estimates** — always confirm with the
 `selfplay` match runner (see [CONTRIBUTING.md](../CONTRIBUTING.md)); a change that
 "should" help often doesn't.

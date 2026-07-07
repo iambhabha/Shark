@@ -51,7 +51,7 @@ impl SplitMix64 {
 
 /// The fixed seed. Change this only if you deliberately want to invalidate
 /// every previously-saved hash (e.g. a persisted transposition table).
-const ZOBRIST_SEED: u64 = 0x5348_4152_4B5F_5A42; // "SHARK_ZB" in ASCII.
+const ZOBRIST_SEED: u64 = 0x4D59_5448_4F53_5A42; // "MYTHOSZB" in ASCII.
 
 // ---------------------------------------------------------------------------
 // The key table.

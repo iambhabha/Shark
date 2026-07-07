@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Shark logo — a shark over a chessboard with neural-network nodes" width="200">
+<img src="assets/logo.png" alt="Mythos logo — a mythos over a chessboard with neural-network nodes" width="200">
 
-<h1>Shark 🦈</h1>
+<h1>Mythos 🐉</h1>
 
 **A free and strong UCI chess engine written from scratch in Rust.**
 
@@ -12,7 +12,7 @@
 [![Tests](https://img.shields.io/badge/tests-132%20passing-4CAF50)](#-build--run)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-607D8B)](#-build--run)
 
-[Play](#-play-against-shark) ·
+[Play](#-play-against-mythos) ·
 [Features](#-features) ·
 [Build](#-build--run) ·
 [Strength](#-how-strong-is-it) ·
@@ -25,7 +25,7 @@
 
 ## Overview
 
-**Shark** is a chess engine that analyzes positions and plays strong moves. Like
+**Mythos** is a chess engine that analyzes positions and plays strong moves. Like
 most engines it has **no graphical interface** — it speaks the standard **UCI**
 protocol, so it plugs into any chess GUI, *or* you can play it right in your
 **web browser** using the tiny bundled server.
@@ -36,7 +36,7 @@ engine, then reimplemented idiomatically in Rust — bitboards, a modern
 alpha‑beta search, a tapered hand‑crafted evaluation, and an **optional NNUE
 neural‑network evaluation** with its own self‑play data generator and GPU trainer.
 
-> **Honest note:** Shark is a young engine. It already beats most human players,
+> **Honest note:** Mythos is a young engine. It already beats most human players,
 > but it is **not** in the league of top engines like Stockfish (see
 > [How strong is it?](#-how-strong-is-it)). It is built to learn, measure, and
 > improve — one tested change at a time.
@@ -65,7 +65,7 @@ neural‑network evaluation** with its own self‑play data generator and GPU tr
 
 **NNUE pipeline** (train your own evaluation)
 - `datagen` — multi‑threaded self‑play **data generator**
-- `train_nnue.py` — a **PyTorch GPU trainer** that exports Shark's `.nnue` format
+- `train_nnue.py` — a **PyTorch GPU trainer** that exports Mythos's `.nnue` format
 - In‑engine inference that loads a net and evaluates positions
 
 **Interfaces & tooling**
@@ -73,7 +73,7 @@ neural‑network evaluation** with its own self‑play data generator and GPU tr
 - A self‑contained **browser UI** to play against the engine locally
 - `selfplay` — a mini "Fishtest": plays two engine builds and reports the Elo gap
 
-## ♟️ Play against Shark
+## ♟️ Play against Mythos
 
 ### In your browser (easiest)
 
@@ -86,8 +86,8 @@ promotion picker, **undo**, **board flip**, and a **board‑size slider**.
 
 ### In a chess GUI
 
-Shark speaks UCI, so point any UCI GUI at the built binary
-(`target/release/shark`). Great free GUIs: **Cute Chess**, **Arena**,
+Mythos speaks UCI, so point any UCI GUI at the built binary
+(`target/release/mythos`). Great free GUIs: **Cute Chess**, **Arena**,
 **BanksiaGUI**, **En Croissant**. Or drive it by hand:
 
 ```
@@ -98,7 +98,7 @@ go movetime 2000
 
 ## 🛠️ Build & run
 
-Shark needs only a stable **Rust** toolchain (`rustup`) — no external
+Mythos needs only a stable **Rust** toolchain (`rustup`) — no external
 dependencies for the engine itself.
 
 ```sh
@@ -114,7 +114,7 @@ Optional NNUE trainer (needs Python + PyTorch with CUDA for GPU training):
 
 ```sh
 cargo run --release --bin datagen -- data.txt --games 20000   # self-play data
-python train_nnue.py data.txt shark.nnue --epochs 50          # train on GPU
+python train_nnue.py data.txt mythos.nnue --epochs 50          # train on GPU
 ```
 
 > 📘 Full step-by-step guide: **[docs/TRAINING.md](docs/TRAINING.md)** — how to
@@ -169,7 +169,7 @@ many moves deep in a fraction of a second.
 | --- | --- |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the whole engine works, subsystem by subsystem |
 | **[Training](docs/TRAINING.md)** | Generate data, train the NNUE on a GPU, use it |
-| **[Improving](docs/IMPROVING.md)** | Concrete, measured ways to make Shark stronger |
+| **[Improving](docs/IMPROVING.md)** | Concrete, measured ways to make Mythos stronger |
 | **[Contributing](CONTRIBUTING.md)** | Build, test, the "measure everything" rule, PRs |
 | **[Releasing](docs/RELEASING.md)** | Version, build binaries, publish a GitHub release |
 
@@ -202,9 +202,9 @@ src/
   nnue.rs       NNUE inference + incremental accumulator
   uci.rs        UCI protocol loop
   lib.rs        module wiring + re-exports
-  main.rs       the `shark` binary entry point
+  main.rs       the `mythos` binary entry point
   bin/
-    webserver.rs  local web server — play Shark in a browser
+    webserver.rs  local web server — play Mythos in a browser
     selfplay.rs   match harness: plays two engines, reports Elo
     datagen.rs    self-play NNUE training-data generator
     train.rs      (CPU trainer; the GPU one is train_nnue.py)
@@ -222,7 +222,7 @@ web/index.html  the self-contained browser chess UI
 
 ## 📜 License
 
-Shark is free software, licensed under the **GNU General Public License v3.0 or
+Mythos is free software, licensed under the **GNU General Public License v3.0 or
 later** (GPL‑3.0‑or‑later). Because it was developed by studying the GPL‑licensed
 Stockfish, any distributed version must also be GPL‑3.0 and ship its full source.
 See [Copying.txt](https://www.gnu.org/licenses/gpl-3.0.txt) for the full text.

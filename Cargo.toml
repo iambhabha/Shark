@@ -1,16 +1,16 @@
 [package]
-name = "shark"
+name = "mythos"
 version = "0.1.0"
 edition = "2024"
-description = "Shark — a UCI chess engine written in Rust, learning from Stockfish"
+description = "Mythos — a UCI chess engine written in Rust, learning from Stockfish"
 license = "GPL-3.0-or-later"
 
 [[bin]]
-name = "shark"
+name = "mythos"
 path = "src/main.rs"
 
 [lib]
-name = "shark"
+name = "mythos"
 path = "src/lib.rs"
 
 # Fast, optimized release builds — this is what makes a chess engine strong.

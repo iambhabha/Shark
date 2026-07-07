@@ -1,15 +1,15 @@
-# Training Shark's NNUE evaluation
+# Training Mythos's NNUE evaluation
 
-Shark can evaluate positions two ways: a **hand-crafted evaluation (HCE)** that is
-always available, or an **optional NNUE neural network** loaded from a `shark.nnue`
+Mythos can evaluate positions two ways: a **hand-crafted evaluation (HCE)** that is
+always available, or an **optional NNUE neural network** loaded from a `mythos.nnue`
 file. This document explains the full NNUE pipeline — how to generate data, train a
 net on a GPU, and use it in the engine.
 
 ```
   self-play games            PyTorch (GPU)              the engine
  ┌───────────────┐   data   ┌───────────────┐  .nnue   ┌───────────────┐
- │   datagen     │ ───────▶ │  train_nnue.py│ ───────▶ │ shark.nnue    │
- │ (Shark plays) │  FEN|cp| │  768→256→1 net│  weights │ (auto-loaded) │
+ │   datagen     │ ───────▶ │  train_nnue.py│ ───────▶ │ mythos.nnue    │
+ │ (Mythos plays) │  FEN|cp| │  768→256→1 net│  weights │ (auto-loaded) │
  └───────────────┘  result  └───────────────┘          └───────────────┘
 ```
 
@@ -17,7 +17,7 @@ net on a GPU, and use it in the engine.
 
 ## 1. Generate training data (`datagen`)
 
-`datagen` makes Shark play thousands of self-play games and records every quiet
+`datagen` makes Mythos play thousands of self-play games and records every quiet
 position together with (a) the search score and (b) the eventual game result.
 
 ```sh
@@ -58,8 +58,8 @@ GPU is dozens of times faster than CPU).
 # one-time setup — install a CUDA build of PyTorch (example: CUDA 12.8):
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 
-# train, exporting Shark's .nnue format:
-python train_nnue.py nnue_data.txt shark.nnue --epochs 50
+# train, exporting Mythos's .nnue format:
+python train_nnue.py nnue_data.txt mythos.nnue --epochs 50
 ```
 
 | Flag | Meaning | Default |
@@ -80,12 +80,12 @@ and what actually happened.
 
 ## 3. Use the net in the engine
 
-Place the trained net named **`shark.nnue`** next to the engine binary (e.g. in
+Place the trained net named **`mythos.nnue`** next to the engine binary (e.g. in
 `target/release/`). The engine loads it automatically on startup and prints
 `info string NNUE evaluation loaded`. You can also control it over UCI:
 
 ```
-setoption name EvalFile value path/to/shark.nnue   # load a specific net
+setoption name EvalFile value path/to/mythos.nnue   # load a specific net
 setoption name UseNNUE value true                  # force NNUE on
 setoption name UseNNUE value false                 # force the hand-crafted eval
 ```
@@ -94,7 +94,7 @@ If no net is found, the engine simply uses the (strong) hand-crafted evaluation.
 
 ## Architecture & file format
 
-Shark's net is a small **perspective network**:
+Mythos's net is a small **perspective network**:
 
 - **Input:** 768 features = `2 (friendly/enemy) × 6 (piece type) × 64 (square)`,
   computed once from each side's point of view (the board is vertically mirrored

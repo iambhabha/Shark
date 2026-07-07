@@ -33,9 +33,9 @@
 //! ### Table orientation (the classic footgun)
 //!
 //! The published PeSTO tables are written the way you *read* a board — rank 8 at
-//! the top, a-file on the left. Shark's [`Square`] index is the opposite:
+//! the top, a-file on the left. Mythos's [`Square`] index is the opposite:
 //! `0 = a1`, `63 = h8`, going *up* the board. To avoid confusion we store every
-//! table already flipped into Shark's a1-first order, so a White piece indexes
+//! table already flipped into Mythos's a1-first order, so a White piece indexes
 //! its table directly by `square.index()`. A Black piece uses the *same* White
 //! tables but mirrored vertically via [`Square::flip_rank`] — a Black knight on
 //! c6 should score like a White knight on c3. The [`tests`] module asserts full
@@ -78,7 +78,7 @@ const MAX_PHASE: i32 = 24;
 // ---------------------------------------------------------------------------
 // Piece-square tables — midgame and endgame, one 64-entry table per piece type.
 //
-// IMPORTANT: these are stored in Shark's a1-first order. Index 0 is a1, index 7
+// IMPORTANT: these are stored in Mythos's a1-first order. Index 0 is a1, index 7
 // is h1, index 56 is a8. So each table below reads rank 1 first (bottom row of
 // the array) up to rank 8 (top row) — which is why, laid out as text, they look
 // vertically flipped compared to the tables you'll find published online.

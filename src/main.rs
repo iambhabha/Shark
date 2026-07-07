@@ -1,18 +1,18 @@
-//! Shark engine binary.
+//! Mythos engine binary.
 //!
 //! By default this starts the UCI protocol loop, so any chess GUI (Arena,
 //! Cute Chess, BanksiaGUI, a lichess-bot, ...) can talk to the engine. A few
 //! command-line helpers are available for quick manual checks:
 //!
-//! - `shark`            → run the UCI loop (what a GUI expects)
-//! - `shark bench`      → run a fixed perft benchmark and exit
-//! - `shark perft <N>`  → perft the start position to depth N and exit
+//! - `mythos`            → run the UCI loop (what a GUI expects)
+//! - `mythos bench`      → run a fixed perft benchmark and exit
+//! - `mythos perft <N>`  → perft the start position to depth N and exit
 
 use std::time::Instant;
 
-use shark::perft::perft;
-use shark::position::Position;
-use shark::uci::uci_loop;
+use mythos::perft::perft;
+use mythos::position::Position;
+use mythos::uci::uci_loop;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

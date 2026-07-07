@@ -6,6 +6,6 @@
 
 # Trained NNUE nets and self-play training data (large / regenerable)
 *.nnue
-nnue_data.txt
+nnue_*.txt
 data_*.txt
-datagen_progress.txt
+datagen*_progress.txt

@@ -1,6 +1,6 @@
-# Contributing to Shark
+# Contributing to Mythos
 
-Thanks for your interest in Shark! 🦈 This is a learning-driven chess engine, and
+Thanks for your interest in Mythos! 🦈 This is a learning-driven chess engine, and
 contributions — from bug fixes to strength patches to docs — are very welcome.
 
 ## Getting set up
@@ -8,8 +8,8 @@ contributions — from bug fixes to strength patches to docs — are very welcom
 You only need a stable **Rust** toolchain (via [rustup](https://rustup.rs)).
 
 ```sh
-git clone https://github.com/iambhabha/Shark
-cd Shark
+git clone https://github.com/iambhabha/MythosChess
+cd Mythos
 cargo build --release      # compile
 cargo test                 # run the unit tests (must be green)
 cargo run   --release      # start the UCI engine
@@ -43,7 +43,7 @@ strength patch on intuition.** Measure it with the built-in match runner:
 
 ```sh
 # build your version and a baseline, then:
-cargo run --release --bin selfplay -- ./shark_new.exe ./shark_baseline.exe --games 200 --movetime 200
+cargo run --release --bin selfplay -- ./mythos_new.exe ./mythos_baseline.exe --games 200 --movetime 200
 ```
 
 It prints something like `+... -... =...  Elo +X ± Y`. Keep the change only if it
@@ -52,7 +52,7 @@ Because a single machine is slow, batch several well-understood improvements or
 run enough games (hundreds+) so the signal beats the noise. This is exactly what
 Stockfish's Fishtest does — just at a much smaller scale.
 
-> Tip: snapshot a baseline binary (`cp target/release/shark shark_baseline`)
+> Tip: snapshot a baseline binary (`cp target/release/mythos mythos_baseline`)
 > **before** you start, so you always have something to measure against.
 
 ## Code style

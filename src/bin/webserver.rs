@@ -1,7 +1,7 @@
-//! A tiny local web server that lets you play against Shark in your browser.
+//! A tiny local web server that lets you play against Mythos in your browser.
 //!
 //! It uses ONLY the standard library (a minimal HTTP/1.1 server) plus the
-//! `shark` engine crate, so there are no external dependencies. Run it, open
+//! `mythos` engine crate, so there are no external dependencies. Run it, open
 //! http://localhost:8080, and play.
 //!
 //!   cargo run --release --bin webserver            # port 8080
@@ -18,10 +18,10 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use shark::movegen::generate_legal;
-use shark::position::Position;
-use shark::search::{SearchLimits, Searcher};
-use shark::types::{Color, Square};
+use mythos::movegen::generate_legal;
+use mythos::position::Position;
+use mythos::search::{SearchLimits, Searcher};
+use mythos::types::{Color, Square};
 
 /// The browser page, baked into the binary at compile time.
 const INDEX_HTML: &str = include_str!("../../web/index.html");
@@ -44,16 +44,16 @@ fn main() {
     // One shared searcher keeps its transposition table warm across moves.
     let searcher = Arc::new(Mutex::new(Searcher::new(64)));
 
-    // Use NNUE for the browser game when a net (`shark.nnue`) is present; else the
+    // Use NNUE for the browser game when a net (`mythos.nnue`) is present; else the
     // hand-crafted evaluation. Report which one is in effect.
-    if let Some(net) = shark::nnue::load_default() {
+    if let Some(net) = mythos::nnue::load_default() {
         searcher.lock().unwrap().set_net(Some(net));
         println!("NNUE evaluation loaded.");
     } else {
         println!("No NNUE net found; using hand-crafted evaluation.");
     }
 
-    println!("Shark web UI running.  Open  ->  http://localhost:{port}");
+    println!("Mythos web UI running.  Open  ->  http://localhost:{port}");
     println!("(Press Ctrl+C to stop.)");
 
     for stream in listener.incoming() {
@@ -134,7 +134,7 @@ fn route(
 }
 
 /// The one game endpoint. Rebuilds the position from the move history, optionally
-/// lets Shark reply, and returns the full board state as JSON.
+/// lets Mythos reply, and returns the full board state as JSON.
 fn api_play(body: &str, searcher: &Arc<Mutex<Searcher>>) -> String {
     let form = parse_form(body);
 
@@ -160,7 +160,7 @@ fn api_play(body: &str, searcher: &Arc<Mutex<Searcher>>) -> String {
         Err(e) => return format!("{{\"ok\":false,\"error\":\"{}\"}}", escape(&e)),
     };
 
-    // Let Shark move if asked and the game is still going.
+    // Let Mythos move if asked and the game is still going.
     let mut engine_move: Option<String> = None;
     if want_engine {
         let (status, _, _, _) = finalize(&mut pos, &keys);

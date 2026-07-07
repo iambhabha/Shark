@@ -4,7 +4,7 @@
 //! This is the tool we use to *prove* a change made the engine stronger: build
 //! the old and the new binary, play a few hundred games, and read off the Elo
 //! delta with an error bar. It is deliberately self-contained — the only referee
-//! is the `shark` crate itself, so the harness never trusts an engine's opinion
+//! is the `mythos` crate itself, so the harness never trusts an engine's opinion
 //! about legality or game termination.
 //!
 //! The design has three parts:
@@ -32,9 +32,9 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
-use shark::movegen::generate_legal;
-use shark::position::Position;
-use shark::types::{Color, PieceType};
+use mythos::movegen::generate_legal;
+use mythos::position::Position;
+use mythos::types::{Color, PieceType};
 
 // ---------------------------------------------------------------------------
 // Configuration.

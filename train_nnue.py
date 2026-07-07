@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GPU trainer for Shark's NNUE, using PyTorch (CUDA).
+GPU trainer for Mythos's NNUE, using PyTorch (CUDA).
 
 It reads the self-play data produced by `datagen` (lines `FEN | score_cp | result`)
 and trains a (768 -> 256)x2 -> 1 perspective network whose feature convention and

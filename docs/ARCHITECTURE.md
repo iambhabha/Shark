@@ -1,6 +1,6 @@
-# Shark architecture
+# Mythos architecture
 
-A complete tour of how Shark works, subsystem by subsystem. If you want to
+A complete tour of how Mythos works, subsystem by subsystem. If you want to
 *train* the neural network specifically, see **[TRAINING.md](TRAINING.md)**; to
 make the engine stronger, see **[IMPROVING.md](IMPROVING.md)**.
 
@@ -8,7 +8,7 @@ make the engine stronger, see **[IMPROVING.md](IMPROVING.md)**.
 
 A chess engine answers one question — *"what is the best move?"* — by
 **searching** the tree of possible moves and **evaluating** the positions at the
-leaves. Everything in Shark serves that loop:
+leaves. Everything in Mythos serves that loop:
 
 ```
    UCI command / browser move
@@ -110,7 +110,7 @@ time. Key components:
 ## 4. Evaluation — `eval.rs`, `nnue.rs`
 
 The evaluation turns a leaf position into a single number (centipawns, from the
-side-to-move's view). Shark has two:
+side-to-move's view). Mythos has two:
 
 **Hand-crafted evaluation (HCE, `eval.rs`)** — always available, no files needed.
 It is **tapered** (blends a midgame and endgame score by how much material is
@@ -118,7 +118,7 @@ left) and sums: material + piece-square tables (PeSTO), mobility, king safety,
 passed pawns, pawn structure (doubled/isolated/backward), bishop pair, rook on
 open file, and a tempo bonus.
 
-**NNUE (`nnue.rs`)** — an optional neural network loaded from `shark.nnue`.
+**NNUE (`nnue.rs`)** — an optional neural network loaded from `mythos.nnue`.
 It is a `768 → 256 → 1` **perspective network**. Its first layer (the
 "accumulator") is maintained **incrementally**: instead of recomputing it from
 scratch at every leaf, only the features of the piece that moved are updated on
@@ -144,7 +144,7 @@ click-to-move board, promotion picker, undo, board flip, and a size slider.
 
 ## 6. Tooling — `bin/selfplay.rs`, `bin/datagen.rs`
 
-**`selfplay`** is Shark's own miniature "Fishtest": it plays two engine binaries
+**`selfplay`** is Mythos's own miniature "Fishtest": it plays two engine binaries
 against each other over many games (varied openings, colors swapped), referees
 with the crate, and reports the score and estimated Elo gap with an error margin.
 **Every strength change is validated here before it is kept** — see

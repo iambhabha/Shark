@@ -15,7 +15,7 @@
 //!    static judgement; the game result anchors it to reality. A later trainer
 //!    blends the two.
 //!
-//! The referee is the `shark` crate itself, exactly as in the self-play harness:
+//! The referee is the `mythos` crate itself, exactly as in the self-play harness:
 //! we never trust anything but [`generate_legal`] for legality and game end.
 //!
 //! ### Why the filters
@@ -50,10 +50,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use shark::movegen::generate_legal;
-use shark::position::Position;
-use shark::search::{SearchLimits, SearchResult, Searcher};
-use shark::types::{Color, Move, MoveType};
+use mythos::movegen::generate_legal;
+use mythos::position::Position;
+use mythos::search::{SearchLimits, SearchResult, Searcher};
+use mythos::types::{Color, Move, MoveType};
 
 // ---------------------------------------------------------------------------
 // Tuning constants.
@@ -599,7 +599,7 @@ fn run() -> Result<(), String> {
     };
     writeln!(
         writer,
-        "# Shark datagen: <FEN> | <stm_score_cp> | <stm_result>  \
+        "# Mythos datagen: <FEN> | <stm_score_cp> | <stm_result>  \
          (result 1.0/0.5/0.0 from side-to-move; score clamped to +/-{SCORE_CLAMP}cp; \
          {mode}, seed={})",
         cfg.seed

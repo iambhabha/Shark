@@ -1,4 +1,4 @@
-//! The UCI (Universal Chess Interface) protocol loop — how a GUI talks to Shark.
+//! The UCI (Universal Chess Interface) protocol loop — how a GUI talks to Mythos.
 //!
 //! UCI is a line-based text protocol: the GUI writes commands to our stdin
 //! (`position`, `go`, `stop`, ...) and reads our replies from stdout (`info`,
@@ -49,7 +49,7 @@ pub fn uci_loop() {
     // behind a shared `Mutex`, never recreated except for a `Hash` resize.
     let mut searcher = Arc::new(Mutex::new(Searcher::new(DEFAULT_HASH_MB)));
 
-    // If a default net (`shark.nnue`) is found next to the exe or in the working
+    // If a default net (`mythos.nnue`) is found next to the exe or in the working
     // directory, load it so the engine plays with NNUE out of the box. Absent one,
     // we say nothing and quietly use the hand-crafted evaluation.
     if let Some(net) = crate::nnue::load_default() {
@@ -199,8 +199,8 @@ fn stop_search(stop: &Arc<AtomicBool>, handle: &mut Option<JoinHandle<()>>) {
 
 /// Print the `id` lines, the supported options, and the closing `uciok`.
 fn print_id() {
-    println!("id name Shark 0.1.0");
-    println!("id author Shark contributors");
+    println!("id name Mythos 0.1.0");
+    println!("id author Mythos contributors");
     println!("option name Hash type spin default {DEFAULT_HASH_MB} min 1 max 4096");
     println!("option name Clear Hash type button");
     println!("option name UseNNUE type check default true");

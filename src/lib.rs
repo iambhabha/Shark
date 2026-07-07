@@ -1,4 +1,4 @@
-//! # Shark 🦈
+//! # Mythos 🦈
 //!
 //! A UCI chess engine written in Rust, built by studying the Stockfish C++
 //! engine and reimplementing its ideas idiomatically.

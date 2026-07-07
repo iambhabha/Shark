@@ -1,8 +1,8 @@
 //! NNUE: a small, real "efficiently updatable" neural-network evaluation.
 //!
-//! This module owns the *feature convention* and the *network shape* for Shark's
+//! This module owns the *feature convention* and the *network shape* for Mythos's
 //! learned evaluation. The trainer (`src/bin/train.rs`) reuses the exact same
-//! feature function and constants from here via `use shark::nnue::...`, so the
+//! feature function and constants from here via `use mythos::nnue::...`, so the
 //! net that is trained and the net that is served can never disagree about what a
 //! feature index means.
 //!
@@ -181,7 +181,7 @@ impl Net {
         Net::from_bytes(&bytes).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                "not a valid Shark NNUE file (bad magic, dims, or length)",
+                "not a valid Mythos NNUE file (bad magic, dims, or length)",
             )
         })
     }
@@ -596,13 +596,13 @@ fn sub_column_scalar(acc: &mut [f32; HIDDEN], col: &[f32]) {
     }
 }
 
-/// Attempt to load the default net file, `shark.nnue`, from the usual places:
+/// Attempt to load the default net file, `mythos.nnue`, from the usual places:
 /// first alongside the running executable (so a shipped net travels with the
 /// binary), then the current working directory (handy during development).
 /// Returns the first net that loads, or `None` if neither exists / is valid — in
 /// which case the caller stays on the hand-crafted evaluation.
 pub fn load_default() -> Option<Net> {
-    const DEFAULT_NAME: &str = "shark.nnue";
+    const DEFAULT_NAME: &str = "mythos.nnue";
 
     // (a) The directory the current executable lives in.
     if let Some(dir) = std::env::current_exe()
@@ -844,7 +844,7 @@ mod tests {
         net.b2 = 0.333;
 
         let dir = std::env::temp_dir();
-        let path = dir.join("shark_nnue_roundtrip_test.bin");
+        let path = dir.join("mythos_nnue_roundtrip_test.bin");
         let path_str = path.to_str().unwrap();
 
         net.save(path_str).unwrap();
@@ -876,7 +876,7 @@ mod tests {
         let mut net = Net::zeros();
         net.b2 = 1.0;
         let dir = std::env::temp_dir();
-        let path = dir.join("shark_nnue_badmagic_test.bin");
+        let path = dir.join("mythos_nnue_badmagic_test.bin");
         let path_str = path.to_str().unwrap();
         net.save(path_str).unwrap();
 

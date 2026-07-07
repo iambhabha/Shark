@@ -1,8 +1,8 @@
-//! `train` — a small, dependency-free CPU trainer for Shark's NNUE.
+//! `train` — a small, dependency-free CPU trainer for Mythos's NNUE.
 //!
 //! It reads a text dataset of `<FEN> | <score_cp> | <result>` samples, precomputes
 //! each sample's active feature lists (for both perspectives) using the *exact*
-//! feature convention from `shark::nnue`, and fits the perspective net with
+//! feature convention from `mythos::nnue`, and fits the perspective net with
 //! mini-batch stochastic gradient descent. Per-batch gradients are summed in
 //! parallel across worker threads.
 //!
@@ -22,8 +22,8 @@ use std::process;
 use std::sync::Arc;
 use std::thread;
 
-use shark::nnue::{active_features, Net, HIDDEN, NUM_FEATURES, SCALE};
-use shark::position::Position;
+use mythos::nnue::{active_features, Net, HIDDEN, NUM_FEATURES, SCALE};
+use mythos::position::Position;
 
 // ---------------------------------------------------------------------------
 // A precomputed training sample.
