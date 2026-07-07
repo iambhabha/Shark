@@ -24,6 +24,8 @@
 
 use std::fs;
 use std::io::{self, Write};
+#[cfg(target_arch = "x86_64")]
+use std::sync::OnceLock;
 
 use crate::position::Position;
 use crate::types::{Color, Move, MoveType, PieceType, Square};
@@ -113,25 +115,64 @@ pub fn feature_index(perspective: Color, c: Color, pt: PieceType, sq: Square) ->
 /// * `w1`: layer-1 weights, shape `[HIDDEN][NUM_FEATURES]` stored row-major as a
 ///   flat `Vec<f32>` of length `HIDDEN * NUM_FEATURES`. Element `(j, f)` — the
 ///   weight from feature `f` into hidden neuron `j` — is at index `j * NUM_FEATURES + f`.
+/// * `w1t`: the **transposed** copy of `w1`, shape `[NUM_FEATURES][HIDDEN]`, so each
+///   feature's `HIDDEN`-wide column is *contiguous*: `w1t[f * HIDDEN + j] ==
+///   w1[j * NUM_FEATURES + f]`. This is derived in memory from `w1` (see
+///   [`build_w1t`]) and is what the accumulator add/sub touch, because a contiguous
+///   column is SIMD-friendly (a strided gather across `w1` is not). It is *not*
+///   part of the on-disk format — `save` only writes `w1`.
 /// * `b1`: layer-1 biases, length `HIDDEN`.
 /// * `w2`: layer-2 weights, length `2 * HIDDEN` (side-to-move half first).
 /// * `b2`: layer-2 bias (scalar).
 pub struct Net {
     pub w1: Vec<f32>,
+    pub w1t: Vec<f32>,
     pub b1: Vec<f32>,
     pub w2: Vec<f32>,
     pub b2: f32,
 }
 
+/// Build the transposed feature-transformer weights from the row-major `w1`.
+///
+/// `w1` is `[HIDDEN][NUM_FEATURES]` (feature `f`'s column strided by `NUM_FEATURES`);
+/// the result is `[NUM_FEATURES][HIDDEN]` so that feature `f`'s whole `HIDDEN`-wide
+/// column lives contiguously at `out[f * HIDDEN .. f * HIDDEN + HIDDEN]`. The
+/// accumulator update then adds/subtracts that contiguous slice, which vectorizes
+/// cleanly. Deriving `w1t` keeps the `.nnue` file format unchanged.
+fn build_w1t(w1: &[f32]) -> Vec<f32> {
+    debug_assert_eq!(w1.len(), HIDDEN * NUM_FEATURES);
+    let mut w1t = vec![0.0f32; NUM_FEATURES * HIDDEN];
+    for j in 0..HIDDEN {
+        let row = j * NUM_FEATURES;
+        for f in 0..NUM_FEATURES {
+            w1t[f * HIDDEN + j] = w1[row + f];
+        }
+    }
+    w1t
+}
+
 impl Net {
     /// A correctly-sized, all-zeros net. Evaluates every position to 0.
     pub fn zeros() -> Net {
+        let w1 = vec![0.0; HIDDEN * NUM_FEATURES];
+        let w1t = build_w1t(&w1);
         Net {
-            w1: vec![0.0; HIDDEN * NUM_FEATURES],
+            w1,
+            w1t,
             b1: vec![0.0; HIDDEN],
             w2: vec![0.0; 2 * HIDDEN],
             b2: 0.0,
         }
+    }
+
+    /// Rebuild the transposed FT weights (`w1t`) from the current `w1`.
+    ///
+    /// `w1t` is a derived, in-memory-only copy that the accumulator update reads
+    /// (see [`build_w1t`]). It is set automatically by [`Net::zeros`] and
+    /// [`Net::from_bytes`]; call this after mutating `w1` directly (e.g. a trainer
+    /// updating weights) so the transposed copy stays consistent.
+    pub fn rebuild_w1t(&mut self) {
+        self.w1t = build_w1t(&self.w1);
     }
 
     /// Load a net from a file in the binary format written by [`Net::save`].
@@ -189,7 +230,10 @@ impl Net {
             return None;
         }
 
-        Some(Net { w1, b1, w2, b2 })
+        // Derive the transposed FT weights in memory (see `build_w1t`). The disk
+        // format only ever stores `w1`.
+        let w1t = build_w1t(&w1);
+        Some(Net { w1, w1t, b1, w2, b2 })
     }
 
     /// Serialize this net to `path` in the binary format [`Net::from_bytes`] reads.
@@ -256,11 +300,12 @@ impl Net {
         let acc_nstm = self.accumulate(pos, nstm, &mut scratch);
 
         // combined = concat(CReLU(acc_stm), CReLU(acc_nstm)); output = b2 + W2·combined.
-        let mut o = self.b2;
-        for j in 0..HIDDEN {
-            o += self.w2[j] * crelu(acc_stm[j]);
-            o += self.w2[HIDDEN + j] * crelu(acc_nstm[j]);
-        }
+        // Route through the same `output` path (AVX2 or scalar) as `evaluate_acc`
+        // so `evaluate_acc(refresh(pos)) == evaluate(pos)` stays exact.
+        let acc_stm: &[f32; HIDDEN] = (&acc_stm[..]).try_into().expect("accumulate returns HIDDEN");
+        let acc_nstm: &[f32; HIDDEN] =
+            (&acc_nstm[..]).try_into().expect("accumulate returns HIDDEN");
+        let o = self.output(acc_stm, acc_nstm);
 
         let cp = (o * SCALE).round();
         cp.clamp(-10_000.0, 10_000.0) as i32
@@ -285,14 +330,40 @@ impl Net {
             Color::Black => (&acc.black, &acc.white),
         };
 
+        let o = self.output(acc_stm, acc_nstm);
+        let cp = (o * SCALE).round();
+        cp.clamp(-10_000.0, 10_000.0) as i32
+    }
+
+    /// The layer-2 output `b2 + Σ w2·CReLU(combined)` over the two `HIDDEN`-wide
+    /// perspective vectors (side-to-move half first). Runtime-dispatches to an AVX2
+    /// kernel when available, else the scalar reference; the two agree to float
+    /// precision (SIMD only reorders the summation).
+    #[inline]
+    fn output(&self, acc_stm: &[f32; HIDDEN], acc_nstm: &[f32; HIDDEN]) -> f32 {
+        #[cfg(target_arch = "x86_64")]
+        {
+            if have_avx2() {
+                // SAFETY: guarded by a runtime AVX2 check. `w2` is `2*HIDDEN` long
+                // and each accumulator half is exactly `HIDDEN`; the kernel reads
+                // them with unaligned 8-wide loads.
+                return unsafe { output_avx2(&self.w2, self.b2, acc_stm, acc_nstm) };
+            }
+        }
+        self.output_scalar(acc_stm, acc_nstm)
+    }
+
+    /// Scalar reference for [`Net::output`]: interleaves the stm/nstm halves exactly
+    /// as the original `evaluate`/`evaluate_acc` loops did, so it is bit-identical
+    /// to the pre-SIMD code.
+    #[inline]
+    fn output_scalar(&self, acc_stm: &[f32; HIDDEN], acc_nstm: &[f32; HIDDEN]) -> f32 {
         let mut o = self.b2;
         for j in 0..HIDDEN {
             o += self.w2[j] * crelu(acc_stm[j]);
             o += self.w2[HIDDEN + j] * crelu(acc_nstm[j]);
         }
-
-        let cp = (o * SCALE).round();
-        cp.clamp(-10_000.0, 10_000.0) as i32
+        o
     }
 }
 
@@ -366,8 +437,8 @@ impl Accumulator {
     fn add_piece(&mut self, net: &Net, color: Color, pt: PieceType, sq: Square) {
         let wf = feature_index(Color::White, color, pt, sq);
         let bf = feature_index(Color::Black, color, pt, sq);
-        add_column(&mut self.white, &net.w1, wf);
-        add_column(&mut self.black, &net.w1, bf);
+        add_column(&mut self.white, &net.w1t, wf);
+        add_column(&mut self.black, &net.w1t, bf);
     }
 
     /// Subtract the `W1` columns of the piece `(color, pt)` on `sq` from **both**
@@ -376,8 +447,8 @@ impl Accumulator {
     fn remove_piece(&mut self, net: &Net, color: Color, pt: PieceType, sq: Square) {
         let wf = feature_index(Color::White, color, pt, sq);
         let bf = feature_index(Color::Black, color, pt, sq);
-        sub_column(&mut self.white, &net.w1, wf);
-        sub_column(&mut self.black, &net.w1, bf);
+        sub_column(&mut self.white, &net.w1t, wf);
+        sub_column(&mut self.black, &net.w1t, bf);
     }
 
     /// Produce the accumulator for the position *after* `m` is played, given the
@@ -468,25 +539,60 @@ impl Accumulator {
     }
 }
 
-/// Add the `W1` column of feature `f` into `acc` (`acc[j] += W1[j][f]`).
-/// `W1` is row-major `[HIDDEN][NUM_FEATURES]`, so column `f` is strided by
-/// `NUM_FEATURES`.
+/// Add the transposed FT column of feature `f` into `acc` (`acc[j] += w1t[j]`).
+///
+/// `w1t` is the transposed weights `[NUM_FEATURES][HIDDEN]`, so feature `f`'s whole
+/// `HIDDEN`-wide column is the *contiguous* slice `w1t[f*HIDDEN .. f*HIDDEN+HIDDEN]`
+/// (unlike the strided column of the row-major `w1`). Runtime-dispatches to an AVX2
+/// kernel when available, else the scalar loop — the two agree to float precision.
 #[inline]
-fn add_column(acc: &mut [f32; HIDDEN], w1: &[f32], f: usize) {
-    let mut base = f;
-    for a in acc.iter_mut() {
-        *a += w1[base];
-        base += NUM_FEATURES;
+fn add_column(acc: &mut [f32; HIDDEN], w1t: &[f32], f: usize) {
+    let col = &w1t[f * HIDDEN..f * HIDDEN + HIDDEN];
+    #[cfg(target_arch = "x86_64")]
+    {
+        if have_avx2() {
+            // SAFETY: guarded by a runtime AVX2 check; `col` and `acc` are both
+            // exactly `HIDDEN` f32s, and the kernel uses unaligned loads/stores.
+            unsafe {
+                add_column_avx2(acc, col);
+            }
+            return;
+        }
+    }
+    add_column_scalar(acc, col);
+}
+
+/// Subtract the transposed FT column of feature `f` from `acc` (`acc[j] -= w1t[j]`).
+/// The exact inverse of [`add_column`]; same AVX2/scalar dispatch.
+#[inline]
+fn sub_column(acc: &mut [f32; HIDDEN], w1t: &[f32], f: usize) {
+    let col = &w1t[f * HIDDEN..f * HIDDEN + HIDDEN];
+    #[cfg(target_arch = "x86_64")]
+    {
+        if have_avx2() {
+            // SAFETY: see `add_column` — runtime-guarded, exact `HIDDEN` lengths.
+            unsafe {
+                sub_column_avx2(acc, col);
+            }
+            return;
+        }
+    }
+    sub_column_scalar(acc, col);
+}
+
+/// Scalar `acc[j] += col[j]` over the `HIDDEN`-wide contiguous column.
+#[inline]
+fn add_column_scalar(acc: &mut [f32; HIDDEN], col: &[f32]) {
+    for (a, &c) in acc.iter_mut().zip(col.iter()) {
+        *a += c;
     }
 }
 
-/// Subtract the `W1` column of feature `f` from `acc` (`acc[j] -= W1[j][f]`).
+/// Scalar `acc[j] -= col[j]` over the `HIDDEN`-wide contiguous column.
 #[inline]
-fn sub_column(acc: &mut [f32; HIDDEN], w1: &[f32], f: usize) {
-    let mut base = f;
-    for a in acc.iter_mut() {
-        *a -= w1[base];
-        base += NUM_FEATURES;
+fn sub_column_scalar(acc: &mut [f32; HIDDEN], col: &[f32]) {
+    for (a, &c) in acc.iter_mut().zip(col.iter()) {
+        *a -= c;
     }
 }
 
@@ -523,6 +629,153 @@ pub fn load_default() -> Option<Net> {
 #[inline]
 pub fn crelu(x: f32) -> f32 {
     x.clamp(0.0, 1.0)
+}
+
+// ---------------------------------------------------------------------------
+// AVX2 SIMD kernels (x86_64), selected at runtime.
+//
+// The hot NNUE math is two shapes: an `acc[j] ±= col[j]` over 256 f32 (the
+// accumulator update, run per changed piece), and a CReLU-then-dot-product over
+// 512 f32 (the layer-2 output). Both are 8-wide vectorizable with `__m256`.
+//
+// AVX2 is *not* enabled at compile time (baseline x86-64 target), so we detect it
+// once at runtime and route to either a `#[target_feature(enable = "avx2")]`
+// kernel or the scalar fallback. The SIMD result only *reorders* the float sums,
+// so it agrees with the scalar path to ~1e-6.
+// ---------------------------------------------------------------------------
+
+/// Whether the running CPU supports both AVX2 and FMA, detected once and cached.
+///
+/// The output kernel uses `_mm256_fmadd_ps`, which needs the `fma` feature in
+/// addition to `avx2`, so we gate on both. On non-x86_64 this is never called (the
+/// callers are behind `#[cfg(target_arch = "x86_64")]`).
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn have_avx2() -> bool {
+    static AVX2_FMA: OnceLock<bool> = OnceLock::new();
+    *AVX2_FMA
+        .get_or_init(|| std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma"))
+}
+
+/// AVX2 `acc[j] += col[j]` over `HIDDEN` (=256) f32 = 32 vector adds.
+///
+/// # Safety
+/// The caller must have verified AVX2 support (via [`have_avx2`]). `acc` is exactly
+/// `HIDDEN` f32; `col` must be at least `HIDDEN` f32 (it is a `HIDDEN`-wide column
+/// slice). Uses unaligned loads/stores, so no alignment requirement.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+fn add_column_avx2(acc: &mut [f32; HIDDEN], col: &[f32]) {
+    use std::arch::x86_64::*;
+    debug_assert!(col.len() >= HIDDEN);
+    let a = acc.as_mut_ptr();
+    let c = col.as_ptr();
+    let mut j = 0;
+    while j < HIDDEN {
+        // SAFETY: `j` steps by 8 and stops before `HIDDEN`, so every `.add(j)`
+        // plus an 8-wide load/store stays within the `HIDDEN`-long `acc`/`col`.
+        unsafe {
+            let va = _mm256_loadu_ps(a.add(j));
+            let vc = _mm256_loadu_ps(c.add(j));
+            _mm256_storeu_ps(a.add(j), _mm256_add_ps(va, vc));
+        }
+        j += 8;
+    }
+}
+
+/// AVX2 `acc[j] -= col[j]` over `HIDDEN` (=256) f32 = 32 vector subs.
+///
+/// # Safety
+/// Same contract as [`add_column_avx2`].
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+fn sub_column_avx2(acc: &mut [f32; HIDDEN], col: &[f32]) {
+    use std::arch::x86_64::*;
+    debug_assert!(col.len() >= HIDDEN);
+    let a = acc.as_mut_ptr();
+    let c = col.as_ptr();
+    let mut j = 0;
+    while j < HIDDEN {
+        // SAFETY: as in `add_column_avx2` — bounded 8-wide loads/stores.
+        unsafe {
+            let va = _mm256_loadu_ps(a.add(j));
+            let vc = _mm256_loadu_ps(c.add(j));
+            _mm256_storeu_ps(a.add(j), _mm256_sub_ps(va, vc));
+        }
+        j += 8;
+    }
+}
+
+/// AVX2+FMA layer-2 output: `b2 + Σ w2·CReLU(combined)` over the two `HIDDEN` halves.
+///
+/// CReLU is `_mm256_max_ps(x, 0)` then `_mm256_min_ps(x, 1)`; the multiply-add into
+/// an accumulator vector uses `_mm256_fmadd_ps`. The stm half (dotted with
+/// `w2[0..HIDDEN]`) and the nstm half (dotted with `w2[HIDDEN..2*HIDDEN]`) are
+/// accumulated into the same lane-vector, then horizontally summed once at the end
+/// and added to `b2` — matching the scalar `output_scalar` to float precision.
+///
+/// # Safety
+/// The caller must have verified AVX2+FMA support (via [`have_avx2`]). `w2` must be
+/// at least `2 * HIDDEN` f32; each accumulator half is exactly `HIDDEN`. Uses
+/// unaligned loads.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+fn output_avx2(w2: &[f32], b2: f32, acc_stm: &[f32; HIDDEN], acc_nstm: &[f32; HIDDEN]) -> f32 {
+    use std::arch::x86_64::*;
+    debug_assert!(w2.len() >= 2 * HIDDEN);
+
+    let w2p = w2.as_ptr();
+    let stm = acc_stm.as_ptr();
+    let nstm = acc_nstm.as_ptr();
+
+    // SAFETY: `j` steps by 8 and stops before `HIDDEN`; the stm/nstm loads read
+    // within the `HIDDEN`-long accumulators, and the `w2` loads read within its
+    // `2*HIDDEN`-long buffer (`j` for the first half, `HIDDEN + j` for the second).
+    let sum = unsafe {
+        let zero = _mm256_setzero_ps();
+        let one = _mm256_set1_ps(1.0);
+        let mut sum = _mm256_setzero_ps();
+        let mut j = 0;
+        while j < HIDDEN {
+            // stm half: CReLU(acc_stm[j..]) * w2[j..].
+            let xs = _mm256_loadu_ps(stm.add(j));
+            let cs = _mm256_min_ps(_mm256_max_ps(xs, zero), one);
+            let ws = _mm256_loadu_ps(w2p.add(j));
+            sum = _mm256_fmadd_ps(cs, ws, sum);
+
+            // nstm half: CReLU(acc_nstm[j..]) * w2[HIDDEN + j..].
+            let xn = _mm256_loadu_ps(nstm.add(j));
+            let cn = _mm256_min_ps(_mm256_max_ps(xn, zero), one);
+            let wn = _mm256_loadu_ps(w2p.add(HIDDEN + j));
+            sum = _mm256_fmadd_ps(cn, wn, sum);
+
+            j += 8;
+        }
+        sum
+    };
+
+    b2 + hsum256_ps(sum)
+}
+
+/// Horizontal sum of the 8 lanes of a `__m256`.
+///
+/// # Safety
+/// Caller must have AVX (implied by AVX2). Pure lane arithmetic, no memory access.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+fn hsum256_ps(v: std::arch::x86_64::__m256) -> f32 {
+    use std::arch::x86_64::*;
+    // Pure register/lane arithmetic (no memory access): safe inside this
+    // `avx2`-enabled fn, so no `unsafe` block is needed.
+    // Fold the high 128 into the low 128, then reduce the 4 lanes.
+    let lo = _mm256_castps256_ps128(v);
+    let hi = _mm256_extractf128_ps(v, 1);
+    let mut s = _mm_add_ps(lo, hi); // [a0+a4, a1+a5, a2+a6, a3+a7]
+    let shuf = _mm_movehdup_ps(s); // [s1, s1, s3, s3]
+    s = _mm_add_ps(s, shuf); // [s0+s1, _, s2+s3, _]
+    let hi64 = _mm_movehl_ps(shuf, s); // move s2+s3 into lane 0
+    s = _mm_add_ss(s, hi64);
+    _mm_cvtss_f32(s)
 }
 
 // ---------------------------------------------------------------------------
@@ -662,6 +915,9 @@ mod tests {
             *w = weight(i + 0x2000_0000);
         }
         net.b2 = weight(0x3000_0000);
+        // `w1` was mutated directly, so refresh the derived transposed copy that the
+        // accumulator update reads.
+        net.rebuild_w1t();
         net
     }
 
