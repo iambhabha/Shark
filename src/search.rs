@@ -705,9 +705,25 @@ impl Searcher {
             if prunable && i > 0 && quiet && !is_killer && !gives_check {
                 // (6c) Late move pruning (move-count pruning): deep enough into the
                 // ordered move list at low depth, the remaining quiets are almost
-                // never best, so we stop searching them entirely.
+                // never best, so we stop searching them entirely. We prune more
+                // aggressively (halve the move count) when the position is not
+                // improving, since a fail-low there is more likely.
                 const LMP: [usize; 7] = [0, 4, 8, 12, 20, 30, 45];
-                if depth <= 6 && i >= LMP[depth as usize] {
+                if depth <= 6 {
+                    let base = LMP[depth as usize];
+                    let lmp_limit = if improving { base } else { (base + 1) / 2 };
+                    if i >= lmp_limit {
+                        pos.undo_move(m, undo);
+                        self.pop_accumulator();
+                        continue;
+                    }
+                }
+
+                // (6c') History pruning: a quiet move with a clearly poor history
+                // score at low depth is very unlikely to be best — skip it.
+                if depth <= 3
+                    && self.history[m.from_sq().index()][m.to_sq().index()] < -2000 * depth
+                {
                     pos.undo_move(m, undo);
                     self.pop_accumulator();
                     continue;

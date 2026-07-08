@@ -11,4 +11,6 @@
 *.nnue
 nnue_*.txt
 data_*.txt
+sf_*.txt
+sf_*.txt.w*
 datagen*_progress.txt
