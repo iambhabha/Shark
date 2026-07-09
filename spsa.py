@@ -57,7 +57,15 @@ def play(pa, pb, games, mt):
         args += ["--opt-a", f"{k}={v}"]
     for k, v in pb.items():
         args += ["--opt-b", f"{k}={v}"]
-    out = subprocess.run(args, capture_output=True, text=True).stdout
+    # A generous timeout so a single hung/crashed match can never freeze the
+    # whole tuner; on any failure we report a neutral 0.5 and move on. A game can
+    # run to ~200 plies, so budget for that much thinking plus a fixed buffer.
+    budget = 90 + games * mt / 1000.0 * 220
+    try:
+        out = subprocess.run(args, capture_output=True, text=True, timeout=budget).stdout
+    except Exception as e:
+        print(f"  (match failed: {e}; treating as 0.5)", flush=True)
+        return 0.5
     m = re.search(r"score ([\d.]+)%", out)
     return float(m.group(1)) / 100.0 if m else 0.5
 

@@ -21,7 +21,9 @@ import chess.engine
 
 
 def play_worker(wid, sf_path, out_path, games, depth, min_open, max_open, maxmoves, seed):
-    rng = random.Random(seed)
+    # Seed from a fresh OS-random value each launch so a relaunch (after a crash)
+    # generates NEW games/positions instead of duplicating the same seeded run.
+    rng = random.Random(seed ^ int.from_bytes(os.urandom(8), "little"))
     eng = chess.engine.SimpleEngine.popen_uci(sf_path)
     try:
         eng.configure({"Threads": 1, "Hash": 32})
@@ -30,7 +32,9 @@ def play_worker(wid, sf_path, out_path, games, depth, min_open, max_open, maxmov
     limit = chess.engine.Limit(depth=depth)
     written = 0
     t0 = time.time()
-    with open(out_path, "w", encoding="utf-8") as f:
+    # Append mode: a relaunch after a crash keeps the shard's existing samples
+    # and adds to them, so accumulated data is never truncated/lost.
+    with open(out_path, "a", encoding="utf-8") as f:
         for g in range(games):
             board = chess.Board()
             # Random opening for diversity; retry if it ends the game early.
