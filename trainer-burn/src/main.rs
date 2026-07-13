@@ -282,9 +282,13 @@ fn main() {
     let batch: usize = arg_val(&args, "--batch").and_then(|v| v.parse().ok()).unwrap_or(8192);
     let lr: f64 = arg_val(&args, "--lr").and_then(|v| v.parse().ok()).unwrap_or(1e-3);
     let lambda: f32 = arg_val(&args, "--lambda").and_then(|v| v.parse().ok()).unwrap_or(0.7);
+    // GPU throttle: after each batch, sleep `throttle * batch_time`. The GPU is busy
+    // `1/(1+throttle)` of the wall clock, so 0.9 ≈ 53% and 0.7 ≈ 59% — keeps the card
+    // (and the desktop) responsive. 0 = full speed.
+    let throttle: f32 = arg_val(&args, "--throttle").and_then(|v| v.parse().ok()).unwrap_or(0.0);
 
     println!(
-        "trainer-burn: out={out} data={data} shards={shards} positions={positions} epochs={epochs} batch={batch} lr={lr} lambda={lambda}"
+        "trainer-burn: out={out} data={data} shards={shards} positions={positions} epochs={epochs} batch={batch} lr={lr} lambda={lambda} throttle={throttle}"
     );
 
     let t0 = Instant::now();
@@ -307,6 +311,7 @@ fn main() {
         let mut running = 0.0f64;
         let mut nb = 0usize;
         for chunk in order.chunks(batch) {
+            let bt = Instant::now();
             let (stm, stm_m, nstm, nstm_m, tgt) =
                 batch_tensors::<MyBackend>(&samples, chunk, &device);
             let o = model.forward(stm, stm_m, nstm, nstm_m);
@@ -314,13 +319,19 @@ fn main() {
             let diff = pred - tgt;
             let loss = (diff.clone() * diff).mean();
 
-            let lv: f32 = loss.clone().into_scalar();
+            let lv: f32 = loss.clone().into_scalar(); // forces GPU sync
             running += lv as f64;
             nb += 1;
 
             let grads = loss.backward();
             let gp = GradientsParams::from_grads(grads, &model);
             model = optim.step(lr, model, gp);
+
+            // Throttle: idle the GPU for a fraction of the batch's compute time so
+            // average utilization (and the desktop) stays responsive.
+            if throttle > 0.0 {
+                std::thread::sleep(bt.elapsed().mul_f32(throttle));
+            }
         }
         println!(
             "epoch {:>3}/{}  loss {:.6}  ({:.1}s)",
@@ -329,6 +340,11 @@ fn main() {
             running / nb as f64,
             te.elapsed().as_secs_f32()
         );
+        // Checkpoint after every epoch: overwrite `out` with the latest net so a
+        // reaped/killed run still leaves the most-trained net on disk (export is
+        // cheap ~1s vs a ~465s epoch).
+        export(&model, &out);
+        println!("  checkpoint -> {out}");
     }
 
     export(&model, &out);
